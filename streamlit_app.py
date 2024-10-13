@@ -1,56 +1,125 @@
 import streamlit as st
-from openai import OpenAI
+import requests
+from typing import Optional
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+FLOW_ID = "c26ad923-d203-45d3-ba39-b70619ea5880"
+ENDPOINT = "dnd_bot_chat" # You can set a specific endpoint name in the flow settings
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# You can tweak the flow by adding a tweaks dictionary
+# e.g {"OpenAI-XXXXX": {"model_name": "gpt-4"}}
+TWEAKS = {
+  "ChatInput-HNgdh": {},
+  "ChatOutput-DIptw": {},
+  "OllamaModel-fKOfL": {},
+  "ParseData-uNNzh": {},
+  "Prompt-6oxDV": {},
+  "Chroma-FuShZ": {},
+  "OllamaEmbeddings-Lyoon": {},
+  "pgvector-NRZEs": {}
+}
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+def run_flow(message: str,
+  endpoint: str,
+  output_type: str = "chat",
+  input_type: str = "chat",
+  tweaks: Optional[dict] = None,
+  api_key: Optional[str] = None) -> dict:
+    """
+    Run a flow with a given message and optional tweaks.
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    :param message: The message to send to the flow
+    :param endpoint: The ID or the endpoint name of the flow
+    :param tweaks: Optional tweaks to customize the flow
+    :return: The JSON response from the flow
+    """
+    BASE_API_URL = st.secrets["base_api_url"]
+    api_url = f"{BASE_API_URL}/api/v1/run/{endpoint}"
+    api_secret_key = st.secrets["langflow_key"]
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+    payload = {
+        "input_value": message,
+        "output_type": output_type,
+        "input_type": input_type,
+    }
+    headers = None
+    if tweaks:
+        payload["tweaks"] = tweaks
+    if api_key:
+        headers = {"x-api-key": api_key}
+    elif not api_key:
+        headers = {"x-api-key": api_secret_key}
+    response = requests.post(api_url, json=payload, headers=headers)
+    return response.json()
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+def chat(prompt: str):
+  with current_chat_message:
+    # Block input to prevent sending messages whilst AI is responding
+    st.session_state.disabled = True
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    # Add user message to chat history
+    st.session_state.messages.append(("human", prompt))
+
+    # Display user message in chat message container
+    with st.chat_message("human"):
+      st.markdown(prompt)
+
+    # Display assistant response in chat message container
+    with st.chat_message("ai"):
+      # Get complete chat history, including latest question as last message
+      history = "\n".join(
+        [f"{role}: {msg}" for role, msg in st.session_state.messages]
+      )
+
+      query = f"{history}\nAI:"
+
+      # Setup any tweaks you want to apply to the flow
+      inputs = {"question": query}
+      output = run_flow(prompt, ENDPOINT, tweaks=TWEAKS)
+ 
+      #print(output.get("outputs")[0]["outputs"][0]["results"]["message"]["data"]["text"])
+      message_output = output.get("outputs")[0]["outputs"][0]["results"]["message"]["data"]["text"]
+
+      placeholder = st.empty()
+
+      # write response without "▌" to indicate completed message.
+      with placeholder:
+        st.markdown(message_output)
+
+    # Log AI response to chat history
+    st.session_state.messages.append(("ai", message_output))
+    # Unblock chat input
+    st.session_state.disabled = False
+
+    st.rerun()
+
+
+st.set_page_config(page_title="Birthright D&D Bot")
+st.title("Birthright D&D Assistant DM")
+
+system_prompt = ""
+if "messages" not in st.session_state:
+    st.session_state.messages = [("system", system_prompt)]
+if "disabled" not in st.session_state:
+    # `disable` flag to prevent user from sending messages whilst the AI is responding
+    st.session_state.disabled = False
+
+
+with st.chat_message("ai"):
+  st.markdown(
+    f"Hi! I'm your Birthright AI assistant."
+  )
+
+# Display chat messages from history on app rerun
+for role, message in st.session_state.messages:
+    if role == "system":
+        continue
+    with st.chat_message(role):
+        st.markdown(message)
+
+current_chat_message = st.container()
+prompt = st.chat_input("Ask your question here...", disabled=st.session_state.disabled)
+
+if prompt:
+    chat(prompt)

@@ -1,19 +1,7 @@
-# 💬 Chatbot template
+# 💬 D&D Chatbot made with Streamlit
 
-A simple Streamlit app that shows how to build a chatbot using OpenAI's GPT-3.5.
+A simple Streamlit app based on the Chatbot template
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://chatbot-template.streamlit.app/)
+Designed to call a RAG Langflow workflow on a server via API.
 
-### How to run it on your own machine
-
-1. Install the requirements
-
-   ```
-   $ pip install -r requirements.txt
-   ```
-
-2. Run the app
-
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+This particular chatbot was designed for personal use with the Vector DB containing data used for our Dungeons and Dragons campaigns.
