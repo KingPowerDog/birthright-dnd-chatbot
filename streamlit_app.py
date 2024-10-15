@@ -97,6 +97,7 @@ def chat(prompt: str):
 
 st.set_page_config(page_title="Birthright D&D Bot")
 st.title("Birthright D&D Assistant DM")
+st.caption("You can interact with the bot by asking it to roll any number of dice (eg, 'Roll 2 d20') or ask a question related to Dungeons and Dragons 3.5 edition")
 
 system_prompt = ""
 if "messages" not in st.session_state:
